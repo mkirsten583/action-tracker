@@ -1,0 +1,1473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14181D">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Actions">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✅</text></svg>">
+<title>Action Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@4.30.0/lib/msal-browser.min.js"
+        integrity="sha384-RGxxfG5yRS8DLU7ZJ8OoLhbV/BsJFHyPuMVHrTLbpj3t5Z15LnviJmaznKY/a7LZ"
+        crossorigin="anonymous"></script>
+<style>
+  :root{
+    --bg:#14181D; --panel:#1A1F26; --panel-raised:#20262E;
+    --line:#2A3138; --line-soft:#232931;
+    --text:#E8EAED; --text-dim:#8B94A0; --text-faint:#5B6470;
+    --biz:#4C8BF5; --personal:#5FBF8F;
+    --crit:#E5484D; --high:#F5A623; --med:#4C8BF5; --low:#6B7280;
+    --overdue:#E5484D; --ok:#5FBF8F;
+    --sat:env(safe-area-inset-top,0px); --sab:env(safe-area-inset-bottom,0px);
+    --sal:env(safe-area-inset-left,0px); --sar:env(safe-area-inset-right,0px);
+  }
+  *{box-sizing:border-box;}
+  html,body{background:var(--bg);}
+  body{margin:0;color:var(--text);font-family:'IBM Plex Sans',-apple-system,sans-serif;
+    font-size:14px;line-height:1.5;-webkit-text-size-adjust:100%;
+    padding-left:var(--sal);padding-right:var(--sar);}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  button{-webkit-tap-highlight-color:transparent;}
+
+  /* ---------- Top status bar ---------- */
+  .filebar{position:sticky;top:0;z-index:20;background:var(--panel-raised);border-bottom:1px solid var(--line);
+    padding:8px 16px;padding-top:calc(8px + var(--sat));display:flex;align-items:center;gap:10px;}
+  .file-status{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text-dim);min-width:0;flex:1;}
+  .file-status span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--text-faint);flex-shrink:0;}
+  .dot.connected{background:var(--ok);}
+  .dot.dirty{background:var(--high);}
+  .dot.error{background:var(--crit);}
+  .acct{color:var(--text-faint);font-size:12px;white-space:nowrap;}
+
+  .shell{display:flex;min-height:calc(100vh - 44px);}
+  .sidebar{width:200px;flex-shrink:0;border-right:1px solid var(--line);padding:24px 0;}
+  .brand{padding:0 20px 24px;border-bottom:1px solid var(--line);margin-bottom:16px;}
+  .brand-title{font-weight:600;font-size:15px;}
+  .brand-sub{color:var(--text-faint);font-size:11px;font-family:'IBM Plex Mono',monospace;margin-top:2px;}
+  .nav-item{padding:9px 20px;color:var(--text-dim);cursor:pointer;font-size:13.5px;
+    border-left:2px solid transparent;display:flex;justify-content:space-between;align-items:center;gap:8px;}
+  .nav-item:hover{color:var(--text);background:var(--panel);}
+  .nav-item.active{color:var(--text);border-left-color:var(--biz);background:var(--panel);}
+  .nav-count{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-faint);}
+  .nav-section-label{padding:16px 20px 6px;color:var(--text-faint);font-size:11px;text-transform:uppercase;letter-spacing:.08em;}
+
+  .main{flex:1;min-width:0;padding:28px 36px calc(60px + var(--sab));}
+  .topbar{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px;gap:20px;}
+  .view-title{font-size:20px;font-weight:600;}
+  .view-sub{color:var(--text-dim);font-size:13px;margin-top:3px;}
+
+  .btn{background:var(--biz);color:#0B1017;border:none;padding:9px 16px;border-radius:4px;
+    font-weight:600;font-size:13.5px;cursor:pointer;font-family:inherit;white-space:nowrap;}
+  .btn:hover{filter:brightness(1.08);}
+  .btn:disabled{opacity:.4;cursor:not-allowed;}
+  .btn-ghost{background:transparent;color:var(--text-dim);border:1px solid var(--line);}
+  .btn-ghost:hover{color:var(--text);border-color:var(--text-faint);}
+  .btn-danger{background:var(--crit);color:#fff;}
+  .btn-small{padding:5px 10px;font-size:12px;border-radius:3px;}
+  .icon-btn{background:transparent;border:1px solid var(--line);color:var(--text-dim);border-radius:4px;
+    height:30px;min-width:30px;padding:0 9px;cursor:pointer;font-size:14px;font-family:inherit;}
+  .icon-btn:hover{color:var(--text);border-color:var(--text-faint);}
+
+  /* ---------- Chart card ---------- */
+  .chart-card{background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:14px 16px 8px;margin-bottom:20px;}
+  .chart-layout{display:flex;align-items:stretch;}
+  .chart-main{flex:1;min-width:0;padding-right:16px;}
+  .chart-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:16px;flex-wrap:wrap;}
+  .chart-title{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-dim);}
+  .chart-legend{display:flex;gap:14px;flex-wrap:wrap;}
+  .legend-item{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--text-dim);}
+  .legend-swatch{width:9px;height:9px;border-radius:2px;}
+  .chart-empty{color:var(--text-faint);font-size:13px;padding:24px 0 30px;text-align:center;}
+  .bar-seg:hover{filter:brightness(1.25);}
+
+  .today-panel{width:290px;flex-shrink:0;border-left:1px solid var(--line);padding-left:16px;display:flex;flex-direction:column;}
+  .today-count{font-family:'IBM Plex Mono',monospace;color:var(--text);margin-left:4px;}
+  .today-list{display:flex;flex-direction:column;gap:2px;overflow-y:auto;max-height:190px;}
+  .today-item{display:flex;gap:8px;align-items:flex-start;padding:7px 6px;border-radius:4px;cursor:pointer;}
+  .today-item:hover{background:var(--panel-raised);}
+  .today-item .pri-dot{margin:6px 0 0;flex-shrink:0;}
+  .today-body{flex:1;min-width:0;}
+  .today-desc{font-size:13px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+  .today-meta{font-size:11.5px;color:var(--text-faint);margin-top:2px;}
+  .today-close{background:none;border:1px solid var(--line);color:var(--text-faint);border-radius:3px;
+    width:26px;height:26px;flex-shrink:0;cursor:pointer;font-size:12px;line-height:1;padding:0;}
+  .today-close:hover{color:var(--ok);border-color:var(--ok);}
+  .today-overdue{display:block;width:100%;text-align:left;background:rgba(229,72,77,.1);border:1px solid rgba(229,72,77,.35);
+    color:var(--overdue);border-radius:4px;padding:6px 10px;font-size:12.5px;margin-bottom:8px;cursor:pointer;font-family:inherit;}
+  .today-empty{color:var(--text-dim);font-size:13px;padding:10px 6px;}
+  .today-next{color:var(--text-faint);font-size:12px;margin-top:6px;line-height:1.4;padding:0 6px;}
+
+  /* ---------- Stats ---------- */
+  .stat-strip{display:flex;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:5px;overflow:hidden;margin-bottom:20px;}
+  .stat{flex:1;background:var(--panel);padding:14px 18px;cursor:pointer;}
+  .stat:hover{background:var(--panel-raised);}
+  .stat.active{background:var(--panel-raised);box-shadow:inset 0 -2px 0 var(--biz);}
+  .stat-num{font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:600;}
+  .stat-num.overdue{color:var(--overdue);}
+  .stat-label{color:var(--text-dim);font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;margin-top:2px;}
+
+  /* ---------- Filters & table ---------- */
+  .filters{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;}
+  select,input[type=text],input[type=date],input[type=url],textarea{background:var(--panel);border:1px solid var(--line);
+    color:var(--text);padding:7px 10px;border-radius:4px;font-family:inherit;font-size:13px;}
+  select:focus,input:focus,textarea:focus{outline:none;border-color:var(--biz);}
+  .search-input{min-width:220px;}
+
+  table{width:100%;border-collapse:collapse;}
+  thead th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-faint);
+    font-weight:500;padding:8px 10px;border-bottom:1px solid var(--line);}
+  tbody tr{border-bottom:1px solid var(--line-soft);}
+  tbody tr:hover{background:var(--panel);}
+  tbody td{padding:10px;vertical-align:top;}
+  tbody tr.is-overdue td.c-due{color:var(--overdue);font-weight:600;}
+  tbody tr.is-closed{opacity:.45;}
+  .desc-cell{max-width:340px;}
+  .source-text{color:var(--text-dim);font-size:12.5px;margin-top:2px;}
+  .pill{display:inline-block;padding:2px 8px;border-radius:3px;font-size:11px;font-weight:600;}
+  .pill-biz{background:rgba(76,139,245,.15);color:var(--biz);}
+  .pill-personal{background:rgba(95,191,143,.15);color:var(--personal);}
+  .pri-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;}
+  .row-actions{display:flex;gap:6px;white-space:nowrap;}
+  .icon-link{color:var(--text-faint);text-decoration:none;}
+  .icon-link:hover{color:var(--biz);}
+  .clip{color:var(--text-faint);margin-left:4px;}
+  .empty-state{padding:60px 20px;text-align:center;color:var(--text-dim);}
+
+  /* ---------- Modals ---------- */
+  .modal-backdrop{position:fixed;inset:0;background:rgba(8,10,13,.6);display:none;align-items:flex-start;
+    justify-content:center;padding:40px 20px;padding-top:calc(40px + var(--sat));overflow:auto;z-index:50;}
+  .modal-backdrop.open{display:flex;}
+  .modal-backdrop.top{z-index:60;}
+  .modal{background:var(--panel-raised);border:1px solid var(--line);border-radius:6px;width:100%;max-width:520px;padding:24px;}
+  .modal h3{margin:0 0 16px;font-size:16px;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:12px;color:var(--text-dim);margin-bottom:5px;}
+  .field input,.field select,.field textarea{width:100%;}
+  .field-row{display:flex;gap:12px;}
+  .field-row .field{flex:1;min-width:0;}
+  .modal-actions{display:flex;justify-content:space-between;margin-top:20px;padding-top:16px;border-top:1px solid var(--line);gap:8px;}
+  .modal-actions-right{display:flex;gap:8px;}
+  .extend-row{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;}
+  .attach-list{display:flex;flex-direction:column;gap:6px;margin-bottom:8px;}
+  .attach-row{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:6px 10px;}
+  .attach-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;}
+  .attach-size{color:var(--text-faint);font-size:11px;font-family:'IBM Plex Mono',monospace;}
+  .attach-none{color:var(--text-faint);font-size:12.5px;margin-bottom:8px;}
+  .attach-msg{color:var(--text-dim);font-size:12px;margin-top:6px;}
+  .attach-msg.warn{color:var(--high);}
+
+  .prog{display:flex;align-items:center;gap:8px;margin-top:5px;max-width:260px;}
+  .prog-bar{flex:1;height:5px;background:var(--line);border-radius:3px;overflow:hidden;min-width:70px;}
+  .prog-bar span{display:block;height:100%;background:var(--biz);border-radius:3px;}
+  .prog-bar.done span{background:var(--ok);}
+  .prog-txt{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-dim);white-space:nowrap;}
+  tr.child-row td.desc-cell{padding-left:24px;}
+  tr.child-row td.desc-cell::before{content:'\21B3';position:absolute;margin-left:-16px;color:var(--text-faint);}
+  tr.child-row{background:rgba(255,255,255,.012);}
+  .kid-list{display:flex;flex-direction:column;gap:4px;margin-bottom:8px;}
+  .kid-row{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);
+    border-radius:4px;padding:6px 10px;font-size:13px;}
+  .kid-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .kid-row.is-done .kid-name{color:var(--text-faint);text-decoration:line-through;}
+  .kid-meta{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-faint);white-space:nowrap;}
+  .kid-none{color:var(--text-faint);font-size:12.5px;margin-bottom:8px;}
+  .close-warn{color:var(--high);font-size:12.5px;margin:-6px 0 12px;}
+  .close-desc{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:10px 12px;
+    font-size:13.5px;margin-bottom:14px;color:var(--text);}
+  .closed-note{color:var(--ok);font-size:12.5px;margin-top:3px;}
+  .set-block{padding:12px 0;border-bottom:1px solid var(--line-soft);}
+  .set-block:last-of-type{border-bottom:none;}
+  .set-label{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-faint);margin-bottom:4px;}
+  .set-row{display:flex;justify-content:space-between;align-items:center;gap:10px;}
+  .set-value{font-size:13px;overflow:hidden;text-overflow:ellipsis;word-break:break-all;}
+  .set-path{font-size:11.5px;color:var(--text-faint);font-family:'IBM Plex Mono',monospace;word-break:break-all;}
+  .set-buttons{display:flex;gap:8px;flex-wrap:wrap;}
+
+  /* OneDrive browser */
+  .crumbs{display:flex;flex-wrap:wrap;gap:4px;font-size:12.5px;color:var(--text-dim);margin-bottom:10px;}
+  .crumb{cursor:pointer;color:var(--biz);}
+  .crumb.current{color:var(--text);cursor:default;}
+  .pick-list{border:1px solid var(--line);border-radius:4px;max-height:50vh;overflow-y:auto;background:var(--panel);}
+  .pick-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line-soft);cursor:pointer;}
+  .pick-row:last-child{border-bottom:none;}
+  .pick-row:hover{background:var(--panel-raised);}
+  .pick-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .pick-hint{color:var(--text-faint);font-size:12px;padding:14px 12px;}
+
+  /* Gate (sign-in / setup) */
+  .gate{position:fixed;inset:0;background:var(--bg);z-index:40;display:none;align-items:center;justify-content:center;
+    padding:24px;padding-top:calc(24px + var(--sat));}
+  .gate.open{display:flex;}
+  .gate-card{max-width:380px;text-align:center;}
+  .gate-card h2{font-size:19px;margin:14px 0 8px;}
+  .gate-card p{color:var(--text-dim);font-size:14px;margin:0 0 20px;}
+  .gate-logo{width:56px;height:56px;border-radius:12px;background:var(--biz);color:#0B1017;display:inline-flex;
+    align-items:center;justify-content:center;font-size:30px;font-weight:700;}
+
+  ::-webkit-scrollbar{width:10px;height:10px;}
+  ::-webkit-scrollbar-thumb{background:var(--line);border-radius:5px;}
+
+  /* ---------- Tablet ---------- */
+  @media (max-width:1000px){
+    .chart-layout{flex-direction:column;}
+    .chart-main{padding-right:0;}
+    .today-panel{width:auto;border-left:none;border-top:1px solid var(--line);padding-left:0;padding-top:12px;margin-top:6px;}
+    .today-list{max-height:none;}
+  }
+
+  /* ---------- Phone ---------- */
+  @media (max-width:760px){
+    .filebar{padding-left:12px;padding-right:12px;}
+    .acct{display:none;}
+    .shell{flex-direction:column;}
+    .sidebar{width:auto;border-right:none;border-bottom:1px solid var(--line);padding:0;display:flex;overflow-x:auto;
+      -webkit-overflow-scrolling:touch;scrollbar-width:none;}
+    .sidebar::-webkit-scrollbar{display:none;}
+    .brand,.nav-section-label{display:none;}
+    .nav-item{border-left:none;border-bottom:2px solid transparent;padding:11px 14px;white-space:nowrap;flex-shrink:0;}
+    .nav-item.active{border-bottom-color:var(--biz);background:transparent;}
+    .main{padding:16px 12px calc(40px + var(--sab));}
+    .topbar{margin-bottom:14px;align-items:center;}
+    .view-title{font-size:18px;}
+    .view-sub{display:none;}
+    .chart-card{padding:12px 12px 6px;margin-bottom:14px;}
+    .chart-legend{gap:10px;}
+    .stat-strip{display:grid;grid-template-columns:1fr 1fr;margin-bottom:14px;}
+    .stat{padding:10px 12px;}
+    .stat-num{font-size:19px;}
+    .filters{gap:6px;}
+    .search-input{min-width:0;width:100%;}
+    .filters select{flex:1 1 45%;min-width:0;}
+    select,input[type=text],input[type=date],input[type=url],textarea{font-size:16px;}
+
+    table,tbody{display:block;}
+    thead{display:none;}
+    tbody tr{display:grid;grid-template-columns:1fr auto;gap:6px 10px;background:var(--panel);border:1px solid var(--line);
+      border-radius:6px;padding:12px;margin-bottom:8px;}
+    tbody tr:hover{background:var(--panel);}
+    tbody td{padding:0;}
+    td.desc-cell{grid-column:1 / -1;max-width:none;font-size:14.5px;}
+    td.c-cat,td.c-status{text-align:right;}
+    td.c-due{font-size:13px;}
+    td.c-status{font-size:13px;color:var(--text-dim);}
+    td.c-act{grid-column:1 / -1;}
+    .row-actions .btn{flex:1;padding:8px;font-size:13px;}
+
+    .modal-backdrop{padding:0;align-items:stretch;}
+    .modal{max-width:none;min-height:100%;border-radius:0;border:none;padding:18px 16px;
+      padding-top:calc(18px + var(--sat));padding-bottom:calc(18px + var(--sab));}
+    .field-row{flex-direction:column;gap:0;}
+    .extend-row .btn{flex:1 1 30%;padding:8px 4px;}
+    .pick-list{max-height:60vh;}
+  }
+</style>
+</head>
+<body>
+
+<div class="filebar">
+  <div class="file-status">
+    <span class="dot" id="fileDot"></span>
+    <span id="fileStatusText">Starting…</span>
+  </div>
+  <span class="acct" id="acctLabel"></span>
+  <button class="icon-btn" id="refreshBtn" title="Refresh from OneDrive">↻</button>
+  <button class="icon-btn" id="settingsBtn" title="Settings">⚙</button>
+</div>
+
+<div class="shell">
+  <div class="sidebar">
+    <div class="brand">
+      <div class="brand-title">Action Tracker</div>
+      <div class="brand-sub" id="todayLabel">—</div>
+    </div>
+    <div class="nav-item active" data-view="dashboard">Dashboard</div>
+    <div class="nav-item" data-view="all">All <span class="nav-count" id="countAll"></span></div>
+    <div class="nav-section-label">Category</div>
+    <div class="nav-item" data-view="business">Business <span class="nav-count" id="countBiz"></span></div>
+    <div class="nav-item" data-view="personal">Personal <span class="nav-count" id="countPersonal"></span></div>
+    <div class="nav-section-label">Status</div>
+    <div class="nav-item" data-view="closed">Closed <span class="nav-count" id="countClosed"></span></div>
+  </div>
+
+  <div class="main">
+    <div class="topbar">
+      <div>
+        <div class="view-title" id="viewTitle">Dashboard</div>
+        <div class="view-sub" id="viewSub"></div>
+      </div>
+      <button class="btn" id="addBtn">+ Add action</button>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-layout">
+        <div class="chart-main">
+          <div class="chart-head">
+            <div class="chart-title">Next 14 days</div>
+            <div class="chart-legend" id="chartLegend"></div>
+          </div>
+          <div id="chartWrap"></div>
+        </div>
+        <div class="today-panel">
+          <div class="chart-head">
+            <div class="chart-title">Due today <span class="today-count" id="todayCount"></span></div>
+          </div>
+          <div id="todayOverdue"></div>
+          <div class="today-list" id="todayList"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stat-strip">
+      <div class="stat" data-bucket="overdue"><div class="stat-num overdue" id="statOverdue">0</div><div class="stat-label">Overdue</div></div>
+      <div class="stat" data-bucket="today"><div class="stat-num" id="statToday">0</div><div class="stat-label">Due today</div></div>
+      <div class="stat" data-bucket="week"><div class="stat-num" id="statWeek">0</div><div class="stat-label">This week</div></div>
+      <div class="stat" data-bucket="month"><div class="stat-num" id="statMonth">0</div><div class="stat-label">This month</div></div>
+    </div>
+
+    <div class="filters">
+      <input type="text" class="search-input" id="searchInput" placeholder="Search description or source…">
+      <select id="priorityFilter">
+        <option value="">All priorities</option>
+        <option value="Critical">Critical</option><option value="High">High</option>
+        <option value="Medium">Medium</option><option value="Low">Low</option>
+      </select>
+      <select id="sourceFilter"><option value="">All sources</option></select>
+      <select id="sortSelect">
+        <option value="due_asc">Due (soonest)</option>
+        <option value="due_desc">Due (latest)</option>
+        <option value="priority">Priority</option>
+        <option value="created">Recently added</option>
+      </select>
+      <button class="btn btn-ghost btn-small" id="clearBucketBtn" style="display:none;">Clear filter ✕</button>
+    </div>
+
+    <table>
+      <thead><tr>
+        <th style="width:34%">Action</th><th>Priority</th><th>Category</th><th>Due</th><th>Status</th><th></th>
+      </tr></thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+    <div class="empty-state" id="emptyState" style="display:none;">No actions match this view.</div>
+  </div>
+</div>
+
+<!-- Add / edit action -->
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal">
+    <h3 id="modalTitle">Add action</h3>
+    <input type="hidden" id="editId">
+    <div class="field">
+      <label>Description</label>
+      <textarea id="fDescription" rows="2" placeholder="What needs to happen"></textarea>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Source</label>
+        <input type="text" id="fSource" list="sourceOptions" autocomplete="off" placeholder="Type a new source, or pick a used one">
+        <datalist id="sourceOptions"></datalist></div>
+      <div class="field"><label>Category</label>
+        <select id="fCategory"><option value="Business">Business</option><option value="Personal">Personal</option></select></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Priority</label>
+        <select id="fPriority">
+          <option value="Critical">Critical</option><option value="High">High</option>
+          <option value="Medium" selected>Medium</option><option value="Low">Low</option>
+        </select></div>
+      <div class="field"><label>Due date</label><input type="date" id="fDueDate"></div>
+    </div>
+    <div class="field" id="extendField" style="display:none;">
+      <label>Extend due date</label>
+      <div class="extend-row">
+        <button class="btn btn-ghost btn-small" data-extend="1">+1 day</button>
+        <button class="btn btn-ghost btn-small" data-extend="3">+3 days</button>
+        <button class="btn btn-ghost btn-small" data-extend="7">+1 week</button>
+        <button class="btn btn-ghost btn-small" data-extend="14">+2 weeks</button>
+        <button class="btn btn-ghost btn-small" data-extend="30">+1 month</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>Part of (parent action)</label>
+      <select id="fParent"><option value="">— none: this is a top-level action —</option></select>
+    </div>
+    <div class="field" id="kidsField" style="display:none;">
+      <label>Sub-actions <span id="kidsProgress" class="prog-txt"></span></label>
+      <div class="kid-list" id="kidList"></div>
+      <div class="kid-none" id="kidNone">No sub-actions yet.</div>
+      <button class="btn btn-ghost btn-small" id="addKidBtn">+ Add sub-action</button>
+    </div>
+    <div class="field">
+      <label>OneNote link (optional)</label>
+      <input type="url" id="fOneNote" placeholder="onenote:https://… or https://onedrive.live.com/…">
+    </div>
+    <div class="field">
+      <label>Attachments</label>
+      <div class="attach-list" id="attachList"></div>
+      <div class="attach-none" id="attachNone">No files attached.</div>
+      <button class="btn btn-ghost btn-small" id="attachBtn">+ Attach file</button>
+      <input type="file" id="attachInput" multiple style="display:none;">
+      <div class="attach-msg" id="attachMsg" style="display:none;"></div>
+    </div>
+    <div class="field">
+      <label>Notes (optional)</label>
+      <textarea id="fNotes" rows="2" placeholder="Extra context, updates, extension reasons…"></textarea>
+    </div>
+    <div class="field" id="closeCommentField" style="display:none;">
+      <label>Close-out comment</label>
+      <textarea id="fEditCloseComment" rows="2" placeholder="What was the outcome?"></textarea>
+    </div>
+    <div class="modal-actions">
+      <div><button class="btn btn-danger btn-small" id="deleteBtn" style="display:none;">Delete</button></div>
+      <div class="modal-actions-right">
+        <button class="btn btn-ghost" id="cancelBtn">Cancel</button>
+        <button class="btn" id="saveBtn">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Close-out comment -->
+<div class="modal-backdrop" id="closeBackdrop">
+  <div class="modal">
+    <h3>Close action</h3>
+    <div class="close-desc" id="closeDesc"></div>
+    <div class="close-warn" id="closeWarn" style="display:none;"></div>
+    <div class="field">
+      <label>Close-out comment (optional)</label>
+      <textarea id="fCloseComment" rows="3" placeholder="What was the outcome? e.g. Response submitted to RSHQ 24/9"></textarea>
+    </div>
+    <div class="modal-actions">
+      <div></div>
+      <div class="modal-actions-right">
+        <button class="btn btn-ghost" id="closeCancelBtn">Cancel</button>
+        <button class="btn" id="closeConfirmBtn">Close action</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Settings -->
+<div class="modal-backdrop" id="settingsBackdrop">
+  <div class="modal">
+    <h3>Settings</h3>
+    <div class="set-block">
+      <div class="set-label">Signed in as</div>
+      <div class="set-row"><div class="set-value" id="setAccount">—</div>
+        <button class="btn btn-ghost btn-small" id="signOutBtn">Sign out</button></div>
+    </div>
+    <div class="set-block">
+      <div class="set-label">Data file</div>
+      <div class="set-row"><div><div class="set-value" id="setDataName">Not chosen</div><div class="set-path" id="setDataPath"></div></div>
+        <button class="btn btn-ghost btn-small" id="changeDataBtn">Change</button></div>
+    </div>
+    <div class="set-block">
+      <div class="set-label">Attachments folder</div>
+      <div class="set-row"><div><div class="set-value" id="setAttachName">Not chosen</div><div class="set-path" id="setAttachPath"></div></div>
+        <button class="btn btn-ghost btn-small" id="changeAttachBtn">Change</button></div>
+    </div>
+    <div class="set-block">
+      <div class="set-label">Backup</div>
+      <div class="set-buttons">
+        <button class="btn btn-ghost btn-small" id="exportBtn">Export copy</button>
+        <button class="btn btn-ghost btn-small" id="importBtn">Import copy</button>
+        <input type="file" id="importInput" accept=".json,application/json" style="display:none;">
+      </div>
+    </div>
+    <div class="set-block">
+      <div class="set-label">Version</div>
+      <div class="set-value" id="setVersion">—</div>
+    </div>
+    <div class="modal-actions"><div></div><button class="btn" id="settingsCloseBtn">Done</button></div>
+  </div>
+</div>
+
+<!-- OneDrive browser -->
+<div class="modal-backdrop top" id="pickerBackdrop">
+  <div class="modal">
+    <h3 id="pickerTitle">Choose from OneDrive</h3>
+    <div class="crumbs" id="pickerCrumbs"></div>
+    <div class="pick-list" id="pickerList"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost btn-small" id="pickerNewBtn">New folder</button>
+      <div class="modal-actions-right">
+        <button class="btn btn-ghost" id="pickerCancelBtn">Cancel</button>
+        <button class="btn" id="pickerActionBtn">Use this folder</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Sign-in / setup gate -->
+<div class="gate" id="gate">
+  <div class="gate-card">
+    <div class="gate-logo">✓</div>
+    <h2 id="gateTitle">Action Tracker</h2>
+    <p id="gateText"></p>
+    <button class="btn" id="gateBtn" style="display:none;"></button>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   CONFIG — paste your Application (client) ID from the Azure portal.
+   This ID is not a secret; it's safe for it to be visible on GitHub.
+   ===================================================================== */
+const CONFIG = {
+  clientId: '3eeffa6d-8645-4792-b9ea-fddf1ead0ca6',
+};
+/* ===================================================================== */
+
+const VERSION = '2026-09-23b · sub-actions + progress';
+const SCOPES = ['User.Read', 'Files.ReadWrite'];
+const GRAPH = 'https://graph.microsoft.com/v1.0';
+const LS = { items:'at_items_cache', ops:'at_pending_ops', dataFile:'at_data_file', attach:'at_attach_folder' };
+const SIMPLE_UPLOAD_MAX = 4 * 1024 * 1024;
+const CHUNK = 327680 * 10;
+const DATA_FILE_NAME = 'action-tracker-data.json';
+
+let msalApp = null, account = null;
+let items = [], pendingOps = [], eTag = null;
+let dataFile = null, attachFolder = null;
+let saving = false, saveAgain = false, saveTimer = null, retryTimer = null;
+let currentView = 'dashboard', currentBucket = null;
+let modalAttachments = [], modalDraftId = null, modalNewUploads = [], modalPendingDeletes = [], modalFromParent = null;
+
+/* ---------------- Small helpers ---------------- */
+const $ = id => document.getElementById(id);
+function lsGet(k, fb){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : fb; }catch(e){ return fb; } }
+function lsSet(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+function uid(){ return 'a_' + Date.now() + '_' + Math.random().toString(36).slice(2,7); }
+function escapeHtml(s){
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function isoLocal(d){ return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,10); }
+function todayStr(){ return isoLocal(new Date()); }
+function addDaysStr(iso, n){ const d = new Date(iso + 'T00:00:00'); d.setDate(d.getDate() + n); return isoLocal(d); }
+function fmtDate(iso){
+  if(!iso) return '—';
+  return new Date(iso + 'T00:00:00').toLocaleDateString('en-AU', {day:'numeric', month:'short', year:'numeric'});
+}
+function fmtSize(b){ if(b < 1024) return b + ' B'; if(b < 1048576) return (b/1024).toFixed(0) + ' KB'; return (b/1048576).toFixed(1) + ' MB'; }
+function safeName(s){ return (s || 'file').replace(/[\\/:*?"<>|]/g, '_').replace(/[\s.]+$/, '').slice(0, 120) || 'file'; }
+
+function setStatus(state, text){
+  $('fileDot').className = 'dot ' + (state || '');
+  $('fileStatusText').textContent = text;
+}
+function setSynced(){
+  const t = new Date().toLocaleTimeString('en-AU', {hour:'numeric', minute:'2-digit'});
+  setStatus('connected', 'Synced with OneDrive · ' + t);
+}
+
+/* ---------------- Gate ---------------- */
+function showGate(title, text, btnLabel, onClick){
+  $('gateTitle').textContent = title;
+  $('gateText').textContent = text;
+  const b = $('gateBtn');
+  if(btnLabel){ b.textContent = btnLabel; b.style.display = 'inline-block'; b.onclick = onClick; }
+  else b.style.display = 'none';
+  $('gate').classList.add('open');
+}
+function hideGate(){ $('gate').classList.remove('open'); }
+
+/* ---------------- Auth (MSAL) ---------------- */
+function redirectUri(){ return location.origin + location.pathname.replace(/index\.html$/, ''); }
+
+async function initAuth(){
+  if(!window.msal) throw new Error('The Microsoft sign-in library did not load. Check your internet connection and reload.');
+  msalApp = new msal.PublicClientApplication({
+    auth: {
+      clientId: CONFIG.clientId,
+      authority: 'https://login.microsoftonline.com/consumers',
+      redirectUri: redirectUri(),
+      postLogoutRedirectUri: redirectUri(),
+    },
+    cache: { cacheLocation: 'localStorage' },
+  });
+  await msalApp.initialize();
+  const resp = await msalApp.handleRedirectPromise();
+  if(resp && resp.account) msalApp.setActiveAccount(resp.account);
+  account = msalApp.getActiveAccount() || msalApp.getAllAccounts()[0] || null;
+  if(account) msalApp.setActiveAccount(account);
+}
+
+function signIn(){ msalApp.loginRedirect({ scopes: SCOPES, prompt: 'select_account' }); }
+
+async function signOut(){
+  if(pendingOps.length && !confirm('Some changes have not reached OneDrive yet. Sign out anyway? They will be lost.')) return;
+  lsSet(LS.ops, []); lsSet(LS.items, []);
+  await msalApp.logoutRedirect({ account });
+}
+
+async function getToken(){
+  if(!account) throw new Error('Not signed in');
+  try{
+    const r = await msalApp.acquireTokenSilent({ scopes: SCOPES, account });
+    return r.accessToken;
+  }catch(e){
+    const code = (e && (e.errorCode || e.name)) || '';
+    if(e instanceof msal.InteractionRequiredAuthError || /interaction_required|login_required|consent_required|no_tokens_found|monitor_window_timeout/.test(code)){
+      setStatus('dirty', 'Session expired — signing in again…');
+      await msalApp.acquireTokenRedirect({ scopes: SCOPES, account });
+      return new Promise(() => {});   // page is navigating away
+    }
+    throw e;
+  }
+}
+
+/* ---------------- Microsoft Graph ---------------- */
+async function graph(path, opts = {}){
+  const token = await getToken();
+  const headers = Object.assign({}, opts.headers || {}, { Authorization: 'Bearer ' + token });
+  return fetch(path.startsWith('http') ? path : GRAPH + path, { ...opts, headers });
+}
+async function graphError(r){
+  let msg = r.status + ' ' + r.statusText;
+  try{ const j = await r.json(); if(j.error && j.error.message) msg = j.error.message; }catch(e){}
+  const err = new Error(msg); err.status = r.status; return err;
+}
+async function graphJson(path, opts){
+  const r = await graph(path, opts);
+  if(!r.ok) throw await graphError(r);
+  return r.status === 204 ? null : r.json();
+}
+// Address a named child of a folder ('root' = top of OneDrive)
+function childRef(folderId, name){
+  const n = encodeURIComponent(name);
+  return folderId === 'root' ? `/me/drive/root:/${n}` : `/me/drive/items/${folderId}:/${n}`;
+}
+
+/* ---------------- Data sync ---------------- */
+function applyOps(base, ops){
+  let list = base.map(x => ({...x}));
+  for(const op of ops){
+    if(op.type === 'upsert'){
+      const i = list.findIndex(x => x.id === op.item.id);
+      if(i > -1) list[i] = {...op.item}; else list.push({...op.item});
+    } else if(op.type === 'delete'){
+      list = list.filter(x => x.id !== op.id);
+    } else if(op.type === 'replaceAll'){
+      list = op.items.map(x => ({...x}));
+    }
+  }
+  return list;
+}
+function persistLocal(){ lsSet(LS.items, items); lsSet(LS.ops, pendingOps); }
+function commit(op){ items = applyOps(items, [op]); pendingOps.push(op); persistLocal(); render(); scheduleSave(); }
+function upsertItem(item){ item.updatedAt = Date.now(); commit({ type:'upsert', item: JSON.parse(JSON.stringify(item)) }); }
+
+async function fetchRemote(){
+  const meta = await graphJson(`/me/drive/items/${dataFile.id}`);
+  eTag = meta.eTag;
+  let text;
+  const url = meta['@microsoft.graph.downloadUrl'];
+  try{
+    const r = await fetch(url, { cache: 'no-store' });
+    if(!r.ok) throw new Error('download ' + r.status);
+    text = await r.text();
+  }catch(e){
+    const r = await graph(`/me/drive/items/${dataFile.id}/content`, { cache: 'no-store' });
+    if(!r.ok) throw await graphError(r);
+    text = await r.text();
+  }
+  if(!text.trim()) return [];
+  const parsed = JSON.parse(text);
+  return Array.isArray(parsed) ? parsed : (parsed.actions || []);
+}
+
+async function loadFromDrive(){
+  setStatus('dirty', 'Loading from OneDrive…');
+  const remote = await fetchRemote();
+  items = applyOps(remote, pendingOps);
+  persistLocal(); render();
+  if(pendingOps.length) saveNow(); else setSynced();
+}
+
+async function refreshFromRemote(quiet){
+  if(!dataFile || !account) return;
+  if(pendingOps.length){ saveNow(); return; }
+  if(saving) return;
+  if(!quiet) setStatus('dirty', 'Refreshing…');
+  try{
+    const remote = await fetchRemote();
+    if(pendingOps.length || saving) return;   // a change arrived meanwhile; let the save handle it
+    items = remote; persistLocal(); render(); setSynced();
+  }catch(e){
+    setStatus('error', 'Could not reach OneDrive — showing last saved copy');
+  }
+}
+
+function scheduleSave(){
+  clearTimeout(saveTimer);
+  setStatus('dirty', 'Saving…');
+  saveTimer = setTimeout(saveNow, 300);
+}
+
+async function saveNow(){
+  if(!dataFile || !account) return;
+  if(saving){ saveAgain = true; return; }
+  if(!pendingOps.length){ setSynced(); return; }
+  saving = true; clearTimeout(retryTimer);
+  setStatus('dirty', 'Saving…');
+  try{
+    let done = false;
+    for(let attempt = 0; attempt < 4 && !done; attempt++){
+      const sentCount = pendingOps.length;
+      const body = JSON.stringify({ schema:'action-tracker/1', savedAt:new Date().toISOString(), actions:items }, null, 2);
+      const headers = { 'Content-Type': 'application/json' };
+      if(eTag) headers['If-Match'] = eTag;
+      const r = await graph(`/me/drive/items/${dataFile.id}/content`, { method:'PUT', headers, body });
+      if(r.status === 412){
+        // Another device saved first: pull their version, re-apply our changes on top, try again
+        const remote = await fetchRemote();
+        items = applyOps(remote, pendingOps);
+        render();
+        continue;
+      }
+      if(!r.ok) throw await graphError(r);
+      const meta = await r.json();
+      eTag = meta.eTag;
+      pendingOps = pendingOps.slice(sentCount);
+      persistLocal();
+      done = true;
+    }
+    if(!done) throw new Error('kept clashing with another device');
+    if(pendingOps.length) saveAgain = true; else setSynced();
+  }catch(e){
+    console.error(e);
+    const n = pendingOps.length;
+    setStatus('error', (navigator.onLine === false ? 'Offline' : 'Not saved') + ' — ' + n + ' change' + (n === 1 ? '' : 's') + ' waiting, will retry');
+    retryTimer = setTimeout(saveNow, 30000);
+  }finally{
+    saving = false;
+    if(saveAgain){ saveAgain = false; saveNow(); }
+  }
+}
+
+/* ---------------- OneDrive browser ---------------- */
+const picker = { mode:'file', stack:[], onDone:null };
+
+function openPicker(mode){
+  picker.mode = mode;
+  picker.stack = [{ id:'root', name:'OneDrive' }];
+  $('pickerTitle').textContent = mode === 'file' ? 'Choose your data file' : 'Choose attachments folder';
+  $('pickerActionBtn').textContent = mode === 'file' ? 'Create new data file here' : 'Use this folder';
+  $('pickerBackdrop').classList.add('open');
+  loadPickerFolder();
+}
+function closePicker(){ $('pickerBackdrop').classList.remove('open'); }
+function pickerPath(extra){
+  const parts = picker.stack.slice(1).map(s => s.name);
+  if(extra) parts.push(extra);
+  return '/' + parts.join('/');
+}
+
+async function loadPickerFolder(){
+  const cur = picker.stack[picker.stack.length - 1];
+  $('pickerCrumbs').innerHTML = picker.stack.map((s, i) =>
+    `<span class="crumb ${i === picker.stack.length - 1 ? 'current' : ''}" data-crumb="${i}">${escapeHtml(s.name)}</span>`
+  ).join('<span>/</span>');
+  const list = $('pickerList');
+  list.innerHTML = '<div class="pick-hint">Loading…</div>';
+  try{
+    const base = cur.id === 'root' ? '/me/drive/root/children' : `/me/drive/items/${cur.id}/children`;
+    let url = base + '?$top=200&$select=id,name,folder,file,size';
+    let all = [];
+    while(url && all.length < 2000){
+      const j = await graphJson(url);
+      all = all.concat(j.value || []);
+      url = j['@odata.nextLink'] || null;
+    }
+    const folders = all.filter(x => x.folder).sort((a,b) => a.name.localeCompare(b.name));
+    const files = picker.mode === 'file'
+      ? all.filter(x => x.file && /\.json$/i.test(x.name)).sort((a,b) => a.name.localeCompare(b.name)) : [];
+    if(!folders.length && !files.length){
+      list.innerHTML = `<div class="pick-hint">${picker.mode === 'file' ? 'No folders or .json files here.' : 'No sub-folders here.'}</div>`;
+      return;
+    }
+    list.innerHTML =
+      folders.map(f => `<div class="pick-row" data-folder="${f.id}" data-name="${escapeHtml(f.name)}"><span>📁</span><span class="pick-name">${escapeHtml(f.name)}</span><span class="nav-count">${f.folder.childCount ?? ''}</span></div>`).join('') +
+      files.map(f => `<div class="pick-row" data-file="${f.id}" data-name="${escapeHtml(f.name)}"><span>📄</span><span class="pick-name">${escapeHtml(f.name)}</span><span class="nav-count">${fmtSize(f.size || 0)}</span></div>`).join('');
+  }catch(e){
+    list.innerHTML = `<div class="pick-hint">Could not list this folder: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+$('pickerCrumbs').addEventListener('click', e => {
+  const i = e.target.dataset.crumb;
+  if(i === undefined) return;
+  picker.stack = picker.stack.slice(0, parseInt(i, 10) + 1);
+  loadPickerFolder();
+});
+$('pickerList').addEventListener('click', e => {
+  const row = e.target.closest('.pick-row');
+  if(!row) return;
+  if(row.dataset.folder){
+    picker.stack.push({ id: row.dataset.folder, name: row.dataset.name });
+    loadPickerFolder();
+  } else if(row.dataset.file){
+    chooseDataFile({ id: row.dataset.file, name: row.dataset.name, path: pickerPath(row.dataset.name) });
+  }
+});
+$('pickerCancelBtn').addEventListener('click', closePicker);
+$('pickerNewBtn').addEventListener('click', async () => {
+  const name = prompt('New folder name', picker.mode === 'file' ? 'Action Tracker' : 'action-tracker-files');
+  if(!name) return;
+  const cur = picker.stack[picker.stack.length - 1];
+  const base = cur.id === 'root' ? '/me/drive/root/children' : `/me/drive/items/${cur.id}/children`;
+  try{
+    const f = await graphJson(base, { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ name: safeName(name), folder:{}, '@microsoft.graph.conflictBehavior':'rename' }) });
+    picker.stack.push({ id: f.id, name: f.name });
+    loadPickerFolder();
+  }catch(e){ alert('Could not create folder: ' + e.message); }
+});
+$('pickerActionBtn').addEventListener('click', async () => {
+  const cur = picker.stack[picker.stack.length - 1];
+  if(picker.mode === 'folder'){
+    attachFolder = { id: cur.id, name: cur.name, path: pickerPath() };
+    lsSet(LS.attach, attachFolder);
+    updateSettingsUI(); renderAttachList(); closePicker();
+    return;
+  }
+  // Create a new, empty data file in this folder
+  try{
+    const r = await graph(childRef(cur.id, DATA_FILE_NAME) + ':/content?@microsoft.graph.conflictBehavior=fail', {
+      method:'PUT', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ schema:'action-tracker/1', savedAt:new Date().toISOString(), actions:[] }, null, 2)
+    });
+    if(r.status === 409){ alert('There is already an ' + DATA_FILE_NAME + ' in this folder — tap it in the list to use it.'); return; }
+    if(!r.ok) throw await graphError(r);
+    const meta = await r.json();
+    chooseDataFile({ id: meta.id, name: meta.name, path: pickerPath(meta.name) });
+  }catch(e){ alert('Could not create the file: ' + e.message); }
+});
+
+async function chooseDataFile(f){
+  if(dataFile && f.id !== dataFile.id && pendingOps.length &&
+     !confirm('Some changes have not been saved to the current file. Switch anyway? They will be discarded.')) return;
+  if(!dataFile || f.id !== dataFile.id){ pendingOps = []; eTag = null; }
+  dataFile = f;
+  lsSet(LS.dataFile, dataFile);
+  closePicker(); hideGate(); updateSettingsUI();
+  try{ await loadFromDrive(); }
+  catch(e){ setStatus('error', 'Could not read that file: ' + e.message); }
+}
+
+/* ---------------- Settings ---------------- */
+function updateSettingsUI(){
+  $('setVersion').textContent = VERSION;
+  $('setAccount').textContent = account ? account.username : '—';
+  $('acctLabel').textContent = account ? account.username : '';
+  $('setDataName').textContent = dataFile ? dataFile.name : 'Not chosen';
+  $('setDataPath').textContent = dataFile ? dataFile.path : '';
+  $('setAttachName').textContent = attachFolder ? attachFolder.name : 'Not chosen';
+  $('setAttachPath').textContent = attachFolder ? attachFolder.path : '';
+}
+$('settingsBtn').addEventListener('click', () => { updateSettingsUI(); $('settingsBackdrop').classList.add('open'); });
+$('settingsCloseBtn').addEventListener('click', () => $('settingsBackdrop').classList.remove('open'));
+$('settingsBackdrop').addEventListener('click', e => { if(e.target.id === 'settingsBackdrop') e.target.classList.remove('open'); });
+$('signOutBtn').addEventListener('click', signOut);
+$('changeDataBtn').addEventListener('click', () => openPicker('file'));
+$('changeAttachBtn').addEventListener('click', () => openPicker('folder'));
+$('refreshBtn').addEventListener('click', () => refreshFromRemote(false));
+
+$('exportBtn').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify({ schema:'action-tracker/1', savedAt:new Date().toISOString(), actions:items }, null, 2)], { type:'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'action-tracker-backup-' + todayStr() + '.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+});
+$('importBtn').addEventListener('click', () => $('importInput').click());
+$('importInput').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if(!f) return;
+  try{
+    const parsed = JSON.parse(await f.text());
+    const list = Array.isArray(parsed) ? parsed : (parsed.actions || []);
+    if(!confirm('Replace all ' + items.length + ' current actions with the ' + list.length + ' in this file?')) return;
+    commit({ type:'replaceAll', items:list });
+  }catch(err){ alert('That file could not be read as tracker data.'); }
+});
+
+/* ---------------- Attachments ---------------- */
+async function uploadToFolder(file, storedName, onProgress){
+  if(file.size <= SIMPLE_UPLOAD_MAX){
+    const r = await graph(childRef(attachFolder.id, storedName) + ':/content', { method:'PUT', body:file });
+    if(!r.ok) throw await graphError(r);
+    onProgress(1);
+    return;
+  }
+  const sess = await graphJson(childRef(attachFolder.id, storedName) + ':/createUploadSession', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ item:{ '@microsoft.graph.conflictBehavior':'replace' } })
+  });
+  let start = 0;
+  while(start < file.size){
+    const end = Math.min(start + CHUNK, file.size);
+    const r = await fetch(sess.uploadUrl, {
+      method:'PUT',
+      headers:{ 'Content-Range': `bytes ${start}-${end - 1}/${file.size}` },
+      body: file.slice(start, end)
+    });
+    if(!(r.ok || r.status === 202)) throw new Error('Upload failed (' + r.status + ')');
+    start = end;
+    onProgress(start / file.size);
+  }
+}
+
+function attachMsg(text, warn){
+  const m = $('attachMsg');
+  m.style.display = text ? 'block' : 'none';
+  m.className = 'attach-msg' + (warn ? ' warn' : '');
+  m.textContent = text || '';
+}
+
+$('attachBtn').addEventListener('click', () => {
+  if(!attachFolder){ attachMsg('Pick an attachments folder first, then tap Attach again.', true); openPicker('folder'); return; }
+  $('attachInput').click();
+});
+$('attachInput').addEventListener('change', async e => {
+  const files = [...e.target.files]; e.target.value = '';
+  if(!files.length) return;
+  $('attachBtn').disabled = true; $('saveBtn').disabled = true;
+  for(const file of files){
+    const stored = modalDraftId + '__' + safeName(file.name);
+    try{
+      await uploadToFolder(file, stored, p => attachMsg('Uploading ' + file.name + ' … ' + Math.round(p*100) + '%'));
+      const att = { storedName: stored, name: file.name, size: file.size, addedAt: new Date().toISOString() };
+      modalAttachments.push(att); modalNewUploads.push(att);
+      renderAttachList();
+    }catch(err){ attachMsg('Could not upload ' + file.name + ': ' + err.message, true); }
+  }
+  $('attachBtn').disabled = false; $('saveBtn').disabled = false;
+  if(!$('attachMsg').classList.contains('warn')) attachMsg('');
+});
+
+async function openAttachment(att){
+  const w = window.open('', '_blank');   // open synchronously so iOS doesn't block it
+  try{
+    const meta = await graphJson(childRef(attachFolder.id, att.storedName) + '?$select=webUrl');
+    if(w) w.location.href = meta.webUrl; else location.href = meta.webUrl;
+  }catch(e){
+    if(w) w.close();
+    alert(e.status === 404
+      ? 'That file is not in the attachments folder. It may have been moved, or a different folder is selected in Settings.'
+      : 'Could not open the file: ' + e.message);
+  }
+}
+function deleteRemote(att){
+  if(!attachFolder) return;
+  graph(childRef(attachFolder.id, att.storedName), { method:'DELETE' }).catch(() => {});
+}
+
+function renderAttachList(){
+  const wrap = $('attachList');
+  wrap.innerHTML = '';
+  $('attachNone').style.display = modalAttachments.length ? 'none' : 'block';
+  modalAttachments.forEach((att, idx) => {
+    const row = document.createElement('div');
+    row.className = 'attach-row';
+    row.innerHTML = `
+      <span class="attach-name" title="${escapeHtml(att.name)}">${escapeHtml(att.name)}</span>
+      <span class="attach-size">${fmtSize(att.size || 0)}</span>
+      <button class="btn btn-ghost btn-small" data-attopen="${idx}">Open</button>
+      <button class="btn btn-ghost btn-small" data-attremove="${idx}">✕</button>`;
+    wrap.appendChild(row);
+  });
+}
+$('attachList').addEventListener('click', e => {
+  const o = e.target.dataset.attopen, r = e.target.dataset.attremove;
+  if(o !== undefined){
+    if(!attachFolder){ openPicker('folder'); return; }
+    openAttachment(modalAttachments[+o]);
+  } else if(r !== undefined){
+    const att = modalAttachments[+r];
+    if(!confirm('Remove "' + att.name + '"? The file will be deleted from OneDrive when you save.')) return;
+    modalAttachments.splice(+r, 1);
+    const ni = modalNewUploads.indexOf(att);
+    if(ni > -1){ modalNewUploads.splice(ni, 1); deleteRemote(att); }
+    else modalPendingDeletes.push(att);
+    renderAttachList();
+  }
+});
+
+/* ---------------- Dates & buckets ---------------- */
+function endOfWeek(d){
+  const date = new Date(d);
+  const day = date.getDay();
+  const diff = (day === 0 ? -6 : 1) - day;
+  date.setDate(date.getDate() + diff + 6); date.setHours(23,59,59,999);
+  return date;
+}
+function endOfMonth(d){ const x = new Date(d); return new Date(x.getFullYear(), x.getMonth()+1, 0, 23,59,59,999); }
+function bucketOf(item){
+  if(item.status === 'Closed' || !item.dueDate) return null;
+  const t = todayStr();
+  if(item.dueDate < t) return 'overdue';
+  if(item.dueDate === t) return 'today';
+  const due = new Date(item.dueDate + 'T00:00:00');
+  const now = new Date(); now.setHours(0,0,0,0);
+  if(due <= endOfWeek(now)) return 'week';
+  if(due <= endOfMonth(now)) return 'month';
+  return 'later';
+}
+const PRIORITIES = ['Critical','High','Medium','Low'];
+const PRIORITY_ORDER = {Critical:0, High:1, Medium:2, Low:3};
+const PRIORITY_COLOR = {Critical:'var(--crit)', High:'var(--high)', Medium:'var(--med)', Low:'var(--low)'};
+const PRIORITY_HEX = {Critical:'#E5484D', High:'#F5A623', Medium:'#4C8BF5', Low:'#6B7280'};
+
+/* ---------------- Sub-actions ---------------- */
+function childrenOf(id){ return items.filter(i => i.parentId === id); }
+function progressOf(id){
+  const kids = childrenOf(id);
+  if(!kids.length) return null;
+  const done = kids.filter(k => k.status === 'Closed').length;
+  return { done, total: kids.length, pct: Math.round(done / kids.length * 100) };
+}
+function descendantIds(id, seen = new Set()){
+  childrenOf(id).forEach(k => { if(!seen.has(k.id)){ seen.add(k.id); descendantIds(k.id, seen); } });
+  return seen;
+}
+function progressBar(p){
+  return `<div class="prog"><div class="prog-bar${p.pct === 100 ? ' done' : ''}"><span style="width:${p.pct}%"></span></div>`
+       + `<span class="prog-txt">${p.done}/${p.total} done · ${p.pct}%</span></div>`;
+}
+function parentOptions(forId){
+  // any open action except itself and its own descendants (no loops)
+  const banned = forId ? new Set([forId, ...descendantIds(forId)]) : new Set();
+  return items.filter(i => i.status !== 'Closed' && !banned.has(i.id))
+              .sort((a,b) => a.description.localeCompare(b.description));
+}
+
+/* ---------------- Sources ---------------- */
+function knownSources(){
+  const seen = new Map();
+  items.forEach(i => { const s = (i.source || '').trim(); if(s && !seen.has(s.toLowerCase())) seen.set(s.toLowerCase(), s); });
+  return [...seen.values()].sort((a,b) => a.localeCompare(b));
+}
+function refreshSourceLists(){
+  const sources = knownSources();
+  $('sourceOptions').innerHTML = sources.map(s => `<option value="${escapeHtml(s)}">`).join('');
+  const sel = $('sourceFilter'), cur = sel.value;
+  sel.innerHTML = '<option value="">All sources</option>' + sources.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+  sel.value = sources.includes(cur) ? cur : '';
+}
+
+/* ---------------- Chart ---------------- */
+function renderChart(scoped){
+  const start = todayStr();
+  const days = [];
+  for(let i = 0; i < 14; i++){
+    const iso = addDaysStr(start, i);
+    const counts = {Critical:0, High:0, Medium:0, Low:0};
+    scoped.forEach(it => { if(it.status !== 'Closed' && it.dueDate === iso && counts[it.priority] !== undefined) counts[it.priority]++; });
+    days.push({ iso, counts, total: PRIORITIES.reduce((s,p) => s + counts[p], 0) });
+  }
+  $('chartLegend').innerHTML = PRIORITIES.map(p =>
+    `<span class="legend-item"><span class="legend-swatch" style="background:${PRIORITY_HEX[p]}"></span>${p}</span>`).join('');
+
+  const wrap = $('chartWrap');
+  const maxTotal = Math.max(...days.map(d => d.total));
+  if(maxTotal === 0){ wrap.innerHTML = '<div class="chart-empty">No actions due in the next 14 days.</div>'; return; }
+
+  const W = Math.max(300, Math.round(wrap.clientWidth || 760)), H = 190;
+  const compact = W < 520;
+  const padL = compact ? 22 : 34, padR = 6, padT = 20, padB = 42;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const slot = plotW / 14;
+  const barW = Math.min(34, slot * 0.62);
+  const yTop = maxTotal <= 4 ? maxTotal : Math.ceil(maxTotal / 2) * 2;
+  const yFor = v => padT + plotH - (v / yTop) * plotH;
+  const tickCount = Math.min(yTop, 4);
+  const ticks = [...new Set(Array.from({length: tickCount + 1}, (_, i) => Math.round(yTop * i / tickCount)))];
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="Actions due over the next 14 days, stacked by priority">`;
+  ticks.forEach(t => {
+    const y = yFor(t);
+    svg += `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="#2A3138"/>`;
+    svg += `<text x="${padL - 6}" y="${y + 4}" text-anchor="end" font-family="IBM Plex Mono, monospace" font-size="10" fill="#5B6470">${t}</text>`;
+  });
+  days.forEach((d, i) => {
+    const cx = padL + slot * i + slot / 2, x = cx - barW / 2;
+    let yCur = yFor(0);
+    PRIORITIES.forEach(p => {
+      const c = d.counts[p]; if(!c) return;
+      const h = (c / yTop) * plotH; yCur -= h;
+      svg += `<rect class="bar-seg" x="${x.toFixed(1)}" y="${yCur.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="${PRIORITY_HEX[p]}" rx="1"><title>${fmtDate(d.iso)} — ${c} ${p}</title></rect>`;
+    });
+    if(d.total) svg += `<text x="${cx}" y="${(yCur - 5).toFixed(1)}" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10" fill="#8B94A0">${d.total}</text>`;
+    const dt = new Date(d.iso + 'T00:00:00');
+    const isToday = i === 0, isWeekend = [0,6].includes(dt.getDay());
+    const fill = isToday ? '#E8EAED' : (isWeekend ? '#4A525C' : '#8B94A0');
+    const wd = dt.toLocaleDateString('en-AU', { weekday: compact ? 'narrow' : 'short' });
+    const dl = compact ? String(dt.getDate()) : (isToday ? 'Today' : dt.getDate() + '/' + (dt.getMonth() + 1));
+    svg += `<text x="${cx}" y="${H - 24}" text-anchor="middle" font-size="10" fill="${fill}" font-weight="${isToday ? 600 : 400}" font-family="IBM Plex Sans, sans-serif">${wd}</text>`;
+    svg += `<text x="${cx}" y="${H - 11}" text-anchor="middle" font-size="10" fill="${fill}" font-weight="${isToday ? 600 : 400}" font-family="IBM Plex Mono, monospace">${dl}</text>`;
+  });
+  svg += `<line x1="${padL}" y1="${yFor(0)}" x2="${W - padR}" y2="${yFor(0)}" stroke="#3A424B"/></svg>`;
+  wrap.innerHTML = svg;
+}
+
+/* ---------------- Due-today panel ---------------- */
+function renderTodayPanel(scoped){
+  const t = todayStr();
+  const open = scoped.filter(i => i.status !== 'Closed');
+  const dueToday = open.filter(i => i.dueDate === t).sort((a,b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority]);
+  const overdueN = open.filter(i => i.dueDate && i.dueDate < t).length;
+  $('todayCount').textContent = dueToday.length ? '· ' + dueToday.length : '';
+  $('todayOverdue').innerHTML = overdueN ? `<button class="today-overdue" id="todayOverdueBtn">⚠ ${overdueN} overdue — view</button>` : '';
+  const ob = $('todayOverdueBtn');
+  if(ob) ob.onclick = () => { currentBucket = 'overdue'; syncStatActive(); render(); };
+
+  const list = $('todayList');
+  if(!dueToday.length){
+    const next = open.filter(i => i.dueDate && i.dueDate > t)
+      .sort((a,b) => a.dueDate.localeCompare(b.dueDate) || PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority])[0];
+    list.innerHTML = '<div class="today-empty">Nothing due today.</div>' + (next
+      ? `<div class="today-next">Next: ${escapeHtml(next.description)}<br><span class="mono">${fmtDate(next.dueDate)}</span> · ${next.priority}</div>` : '');
+    return;
+  }
+  list.innerHTML = dueToday.map(it => `
+    <div class="today-item" data-todayedit="${it.id}">
+      <span class="pri-dot" style="background:${PRIORITY_COLOR[it.priority]}"></span>
+      <div class="today-body">
+        <div class="today-desc">${escapeHtml(it.description)}</div>
+        <div class="today-meta">${it.parentId && items.find(x => x.id === it.parentId) ? '↳ part of ' + escapeHtml(items.find(x => x.id === it.parentId).description) + ' · ' : ''}${it.priority}${it.source ? ' · ' + escapeHtml(it.source) : ''}${it.notes ? ' · ' + escapeHtml(it.notes) : ''}</div>
+      </div>
+      <button class="today-close" data-todayclose="${it.id}" title="Close action">✓</button>
+    </div>`).join('');
+}
+$('todayList').addEventListener('click', e => {
+  const closeId = e.target.dataset.todayclose;
+  if(closeId){ closeAction(closeId); return; }
+  const row = e.target.closest('[data-todayedit]');
+  if(row){ const it = items.find(i => i.id === row.dataset.todayedit); if(it) openModal(it); }
+});
+
+/* ---------------- Main render ---------------- */
+function syncStatActive(){ document.querySelectorAll('.stat').forEach(s => s.classList.toggle('active', s.dataset.bucket === currentBucket)); }
+
+function render(){
+  refreshSourceLists();
+  $('todayLabel').textContent = new Date().toLocaleDateString('en-AU', {weekday:'long', day:'numeric', month:'short'});
+
+  const open = items.filter(i => i.status !== 'Closed');
+  $('countAll').textContent = open.length || '';
+  $('countBiz').textContent = open.filter(i => i.category === 'Business').length || '';
+  $('countPersonal').textContent = open.filter(i => i.category === 'Personal').length || '';
+  $('countClosed').textContent = items.filter(i => i.status === 'Closed').length || '';
+  $('statOverdue').textContent = open.filter(i => bucketOf(i) === 'overdue').length;
+  $('statToday').textContent = open.filter(i => bucketOf(i) === 'today').length;
+  $('statWeek').textContent = open.filter(i => ['today','week'].includes(bucketOf(i))).length;
+  $('statMonth').textContent = open.filter(i => ['today','week','month'].includes(bucketOf(i))).length;
+
+  const titles = {
+    dashboard:['Dashboard','Open actions across business and personal'],
+    all:['All actions','Every open action'],
+    business:['Business','Open actions tagged Business'],
+    personal:['Personal','Open actions tagged Personal'],
+    closed:['Closed','Actions marked complete'],
+  };
+  $('viewTitle').textContent = titles[currentView][0];
+  $('viewSub').textContent = titles[currentView][1] + (currentBucket ? ' — showing ' + currentBucket : '');
+  $('clearBucketBtn').style.display = currentBucket ? 'inline-block' : 'none';
+
+  let list = items.slice();
+  if(currentView === 'business') list = list.filter(i => i.category === 'Business' && i.status !== 'Closed');
+  else if(currentView === 'personal') list = list.filter(i => i.category === 'Personal' && i.status !== 'Closed');
+  else if(currentView === 'closed') list = list.filter(i => i.status === 'Closed');
+  else list = list.filter(i => i.status !== 'Closed');
+
+  const pf = $('priorityFilter').value;
+  if(pf) list = list.filter(i => i.priority === pf);
+  const sf = $('sourceFilter').value;
+  if(sf) list = list.filter(i => (i.source || '').trim().toLowerCase() === sf.toLowerCase());
+  const q = $('searchInput').value.trim().toLowerCase();
+  if(q) list = list.filter(i => (i.description || '').toLowerCase().includes(q) || (i.source || '').toLowerCase().includes(q));
+
+  renderChart(list);
+  renderTodayPanel(list);
+
+  if(currentBucket){
+    list = list.filter(i => {
+      const b = bucketOf(i);
+      if(currentBucket === 'week') return b === 'today' || b === 'week';
+      if(currentBucket === 'month') return b === 'today' || b === 'week' || b === 'month';
+      return b === currentBucket;
+    });
+  }
+
+  const sort = $('sortSelect').value;
+  list.sort((a,b) => {
+    if(sort === 'due_asc') return (a.dueDate || '9999').localeCompare(b.dueDate || '9999');
+    if(sort === 'due_desc') return (b.dueDate || '0000').localeCompare(a.dueDate || '0000');
+    if(sort === 'priority') return PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority];
+    if(sort === 'created') return (b.createdAt || 0) - (a.createdAt || 0);
+    return 0;
+  });
+
+  // nest sub-actions under their parent when both are on screen
+  const shown = new Set(list.map(i => i.id));
+  const rows = [], placed = new Set();
+  function pushWithKids(item, depth){
+    if(placed.has(item.id)) return;
+    placed.add(item.id); rows.push({ item, depth });
+    list.filter(k => k.parentId === item.id).forEach(k => pushWithKids(k, depth + 1));
+  }
+  list.forEach(item => { if(!(item.parentId && shown.has(item.parentId))) pushWithKids(item, 0); });
+  list.forEach(item => pushWithKids(item, 0));   // any left over (parent filtered out)
+
+  const tbody = $('tableBody');
+  tbody.innerHTML = '';
+  $('emptyState').style.display = rows.length ? 'none' : 'block';
+  rows.forEach(({ item, depth }) => {
+    const b = bucketOf(item);
+    const tr = document.createElement('tr');
+    if(b === 'overdue') tr.classList.add('is-overdue');
+    if(item.status === 'Closed') tr.classList.add('is-closed');
+    if(depth) tr.classList.add('child-row');
+    const prog = progressOf(item.id);
+    const oneNote = item.oneNoteLink ? `<a class="icon-link" href="${escapeHtml(item.oneNoteLink)}" target="_blank" title="Open in OneNote">📓</a>` : '';
+    const attN = (item.attachments || []).length;
+    const clip = attN ? `<span class="clip" title="${attN} attached file${attN > 1 ? 's' : ''}">📎${attN > 1 ? attN : ''}</span>` : '';
+    tr.innerHTML = `
+      <td class="desc-cell"><div>${escapeHtml(item.description)}</div><div class="source-text">${escapeHtml(item.source || '')} ${oneNote}${clip}</div>${item.status === 'Closed' && item.closeComment ? `<div class="closed-note">✓ ${escapeHtml(item.closeComment)}</div>` : ''}${prog ? progressBar(prog) : ''}</td>
+      <td class="c-pri"><span class="pri-dot" style="background:${PRIORITY_COLOR[item.priority]}"></span>${item.priority}</td>
+      <td class="c-cat"><span class="pill ${item.category === 'Business' ? 'pill-biz' : 'pill-personal'}">${item.category}</span></td>
+      <td class="c-due mono">${fmtDate(item.dueDate)}</td>
+      <td class="c-status">${item.status === 'Closed' ? 'Closed ' + fmtDate(item.closedDate) : (b === 'overdue' ? 'Overdue' : 'Open')}</td>
+      <td class="c-act"><div class="row-actions">
+        <button class="btn btn-ghost btn-small" data-edit="${item.id}">Edit</button>
+        ${item.status !== 'Closed'
+          ? `<button class="btn btn-ghost btn-small" data-close="${item.id}">Close</button>`
+          : `<button class="btn btn-ghost btn-small" data-reopen="${item.id}">Reopen</button>`}
+      </div></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+/* ---------------- Actions ---------------- */
+let closingId = null;
+function closeAction(id){
+  const it = items.find(i => i.id === id);
+  if(!it) return;
+  closingId = id;
+  $('closeDesc').textContent = it.description;
+  const p = progressOf(id);
+  const openKids = p ? p.total - p.done : 0;
+  $('closeWarn').style.display = openKids ? 'block' : 'none';
+  $('closeWarn').textContent = openKids
+    ? `⚠ ${openKids} of ${p.total} sub-action${p.total > 1 ? 's' : ''} still open. Closing this won't close them.` : '';
+  $('fCloseComment').value = it.closeComment || '';
+  $('closeBackdrop').classList.add('open');
+  setTimeout(() => $('fCloseComment').focus(), 50);
+}
+function finishClose(){
+  const it = items.find(i => i.id === closingId);
+  if(it) upsertItem({ ...it, status:'Closed', closedDate: todayStr(), closeComment: $('fCloseComment').value.trim() });
+  closingId = null;
+  $('closeBackdrop').classList.remove('open');
+}
+$('closeConfirmBtn').addEventListener('click', finishClose);
+$('closeCancelBtn').addEventListener('click', () => { closingId = null; $('closeBackdrop').classList.remove('open'); });
+$('closeBackdrop').addEventListener('click', e => { if(e.target.id === 'closeBackdrop'){ closingId = null; e.target.classList.remove('open'); } });
+
+function reopenAction(id){
+  const it = items.find(i => i.id === id);
+  if(it) upsertItem({ ...it, status:'Open', closedDate: null });
+}
+$('tableBody').addEventListener('click', e => {
+  const { edit, close, reopen } = e.target.dataset;
+  if(edit){ const it = items.find(i => i.id === edit); if(it) openModal(it); }
+  else if(close) closeAction(close);
+  else if(reopen) reopenAction(reopen);
+});
+
+/* ---------------- Nav, stats, filters ---------------- */
+document.querySelectorAll('.nav-item').forEach(el => el.addEventListener('click', () => {
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  el.classList.add('active');
+  currentView = el.dataset.view; currentBucket = null; syncStatActive(); render();
+}));
+document.querySelectorAll('.stat').forEach(el => el.addEventListener('click', () => {
+  currentBucket = currentBucket === el.dataset.bucket ? null : el.dataset.bucket;
+  syncStatActive(); render();
+}));
+$('clearBucketBtn').addEventListener('click', () => { currentBucket = null; syncStatActive(); render(); });
+$('searchInput').addEventListener('input', render);
+['priorityFilter','sourceFilter','sortSelect'].forEach(id => $(id).addEventListener('change', render));
+
+/* ---------------- Add / edit modal ---------------- */
+const backdrop = $('modalBackdrop');
+function renderKidList(parent){
+  const kids = childrenOf(parent.id).sort((x,y) => (x.dueDate || '9999').localeCompare(y.dueDate || '9999'));
+  const p = progressOf(parent.id);
+  $('kidsProgress').textContent = p ? `· ${p.done}/${p.total} done · ${p.pct}%` : '';
+  $('kidNone').style.display = kids.length ? 'none' : 'block';
+  $('kidList').innerHTML = kids.map(k => `
+    <div class="kid-row ${k.status === 'Closed' ? 'is-done' : ''}" data-kid="${k.id}">
+      <span class="pri-dot" style="background:${PRIORITY_COLOR[k.priority]}"></span>
+      <span class="kid-name">${escapeHtml(k.description)}</span>
+      <span class="kid-meta">${k.status === 'Closed' ? 'done' : fmtDate(k.dueDate)}</span>
+    </div>`).join('');
+}
+
+function openModal(item, presetParentId){
+  $('modalTitle').textContent = item ? 'Edit action' : (presetParentId ? 'Add sub-action' : 'Add action');
+  $('editId').value = item ? item.id : '';
+  $('fDescription').value = item ? item.description : '';
+  $('fSource').value = item ? (item.source || '') : '';
+  $('fCategory').value = item ? item.category : 'Business';
+  $('fPriority').value = item ? item.priority : 'Medium';
+  $('fDueDate').value = item ? (item.dueDate || '') : todayStr();
+  $('fOneNote').value = item ? (item.oneNoteLink || '') : '';
+  $('fNotes').value = item ? (item.notes || '') : '';
+  const parentSel = $('fParent');
+  parentSel.innerHTML = '<option value="">— none: this is a top-level action —</option>'
+    + parentOptions(item ? item.id : null).map(o =>
+        `<option value="${o.id}">${escapeHtml(o.description.length > 70 ? o.description.slice(0,70) + '…' : o.description)}</option>`).join('');
+  parentSel.value = item ? (item.parentId || '') : (presetParentId || '');
+  modalFromParent = item ? null : (presetParentId || null);
+  $('kidsField').style.display = item ? 'block' : 'none';
+  if(item) renderKidList(item);
+  $('extendField').style.display = item ? 'block' : 'none';
+  $('closeCommentField').style.display = item && item.status === 'Closed' ? 'block' : 'none';
+  $('fEditCloseComment').value = item ? (item.closeComment || '') : '';
+  $('deleteBtn').style.display = item ? 'inline-block' : 'none';
+  modalDraftId = item ? item.id : uid();
+  modalAttachments = item ? JSON.parse(JSON.stringify(item.attachments || [])) : [];
+  modalNewUploads = []; modalPendingDeletes = [];
+  attachMsg('');
+  renderAttachList();
+  backdrop.classList.add('open');
+  backdrop.scrollTop = 0;
+}
+function closeModal(discard){
+  if(discard){ modalNewUploads.forEach(deleteRemote); }
+  modalNewUploads = []; modalPendingDeletes = [];
+  backdrop.classList.remove('open');
+}
+$('addBtn').addEventListener('click', () => openModal(null));
+$('addKidBtn').addEventListener('click', () => {
+  const parentId = $('editId').value;
+  if(!parentId) return;
+  $('saveBtn').click();                       // save any edits to the parent first
+  if(!backdrop.classList.contains('open')) setTimeout(() => openModal(null, parentId), 60);
+});
+$('kidList').addEventListener('click', e => {
+  const row = e.target.closest('[data-kid]');
+  if(!row) return;
+  const kid = items.find(i => i.id === row.dataset.kid);
+  if(kid){ closeModal(false); setTimeout(() => openModal(kid), 60); }
+});
+$('cancelBtn').addEventListener('click', () => closeModal(true));
+
+document.querySelectorAll('[data-extend]').forEach(btn => btn.addEventListener('click', () => {
+  const f = $('fDueDate');
+  f.value = addDaysStr(f.value || todayStr(), parseInt(btn.dataset.extend, 10));
+}));
+
+$('saveBtn').addEventListener('click', () => {
+  const id = $('editId').value;
+  const description = $('fDescription').value.trim();
+  if(!description){ $('fDescription').focus(); return; }
+  const typed = $('fSource').value.trim();
+  const matched = knownSources().find(s => s.toLowerCase() === typed.toLowerCase());
+  const payload = {
+    description,
+    source: matched || typed,
+    category: $('fCategory').value,
+    priority: $('fPriority').value,
+    dueDate: $('fDueDate').value,
+    oneNoteLink: $('fOneNote').value.trim(),
+    notes: $('fNotes').value.trim(),
+    attachments: modalAttachments,
+    parentId: $('fParent').value || null,
+  };
+  if($('closeCommentField').style.display !== 'none') payload.closeComment = $('fEditCloseComment').value.trim();
+  if(id){
+    const existing = items.find(i => i.id === id);
+    if(existing) upsertItem({ ...existing, ...payload });
+  } else {
+    upsertItem({ id: modalDraftId, ...payload, status:'Open', createdAt:Date.now(), dateRaised:todayStr(), closedDate:null });
+  }
+  modalPendingDeletes.forEach(deleteRemote);
+  const back = !id ? modalFromParent : null;
+  closeModal(false);
+  // after adding a sub-action, go back to the parent so you can add another
+  if(back){
+    const parent = items.find(i => i.id === back);
+    if(parent) setTimeout(() => openModal(parent), 60);
+  }
+});
+
+$('deleteBtn').addEventListener('click', () => {
+  const id = $('editId').value;
+  if(!id) return;
+  const kids = [...descendantIds(id)];
+  if(kids.length){
+    const alsoKids = confirm(`This action has ${kids.length} sub-action${kids.length > 1 ? 's' : ''}.\n\n`
+      + 'OK = delete it and all of them.\nCancel = keep the sub-actions, moving them up to top level.');
+    if(alsoKids){ kids.forEach(k => commit({ type:'delete', id:k })); }
+    else { childrenOf(id).forEach(k => upsertItem({ ...k, parentId:null })); }
+  } else if(!confirm('Delete this action permanently?')) return;
+  commit({ type:'delete', id });
+  closeModal(true);
+});
+
+/* ---------------- Lifecycle ---------------- */
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState !== 'visible') return;
+  render();                                   // date may have rolled over
+  if(account && dataFile && !backdrop.classList.contains('open')) refreshFromRemote(true);
+});
+window.addEventListener('online', () => { if(pendingOps.length) saveNow(); });
+let resizeTimer;
+window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(render, 150); });
+
+(async function init(){
+  items = lsGet(LS.items, []);
+  pendingOps = lsGet(LS.ops, []);
+  dataFile = lsGet(LS.dataFile, null);
+  attachFolder = lsGet(LS.attach, null);
+  render();
+
+  if(!CONFIG.clientId || CONFIG.clientId.startsWith('PASTE')){
+    showGate('One setup step left', 'Open index.html in a text editor and paste your Application (client) ID into CONFIG near the top of the script.');
+    setStatus('error', 'Not configured');
+    return;
+  }
+  try{ await initAuth(); }
+  catch(e){ showGate('Sign-in problem', e.message, 'Reload', () => location.reload()); setStatus('error', 'Sign-in problem'); return; }
+
+  if(!account){
+    showGate('Action Tracker', 'Sign in with the Microsoft account that holds your OneDrive.', 'Sign in with Microsoft', signIn);
+    setStatus('', 'Signed out');
+    return;
+  }
+  updateSettingsUI();
+
+  if(!dataFile){
+    showGate('Choose your data file', 'Find ' + DATA_FILE_NAME + ' in your OneDrive, or create a new one.', 'Browse OneDrive', () => openPicker('file'));
+    setStatus('', 'No data file chosen');
+    return;
+  }
+  hideGate();
+  try{ await loadFromDrive(); }
+  catch(e){
+    console.error(e);
+    setStatus('error', e.status === 404 ? 'Data file not found — choose it again in Settings' : 'Could not reach OneDrive — showing last saved copy');
+  }
+})();
+</script>
+</body>
+</html>
