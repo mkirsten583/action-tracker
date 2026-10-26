@@ -38,6 +38,9 @@
   /* ---------- Top status bar ---------- */
   .filebar{position:sticky;top:0;z-index:20;background:var(--panel-raised);border-bottom:1px solid var(--line);
     padding:8px 16px;padding-top:calc(8px + var(--sat));display:flex;align-items:center;gap:10px;}
+  /* When embedded in the dashboard, it floats a "< Menu" button over our top-left corner.
+     Indent the status bar so the sync indicator is never hidden underneath it. */
+  body.framed .filebar{padding-left:112px;}
   .file-status{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text-dim);min-width:0;flex:1;}
   .file-status span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .dot{width:8px;height:8px;border-radius:50%;background:var(--text-faint);flex-shrink:0;}
@@ -234,6 +237,7 @@
   /* ---------- Phone ---------- */
   @media (max-width:760px){
     .filebar{padding-left:12px;padding-right:12px;}
+    body.framed .filebar{padding-left:106px;}
     .acct{display:none;}
     .shell{flex-direction:column;}
     .sidebar{width:auto;border-right:none;border-bottom:1px solid var(--line);padding:0;display:flex;overflow-x:auto;
@@ -539,7 +543,7 @@ const CONFIG = {
 };
 /* ===================================================================== */
 
-const VERSION = '2026-10-26 · sign-in popup when embedded in dashboard';
+const VERSION = '2026-10-26b · sign-in fixes + status bar clears Menu';
 const SCOPES = ['User.Read', 'Files.ReadWrite'];
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 const LS = { items:'at_items_cache', ops:'at_pending_ops', dataFile:'at_data_file', attach:'at_attach_folder', group:'at_group_subs', lastUser:'at_last_user', noAuto:'at_no_auto_signin' };
@@ -580,7 +584,10 @@ function setStatus(state, text){
 }
 function setSynced(){
   const t = new Date().toLocaleTimeString('en-AU', {hour:'numeric', minute:'2-digit'});
-  setStatus('connected', 'Synced with OneDrive · ' + t);
+  // Embedded on a phone the dashboard's Menu button eats the left end of this bar, so keep it short
+  // enough that the time — the part worth reading — doesn't get cut off.
+  const tight = FRAMED && window.innerWidth < 560;
+  setStatus('connected', (tight ? 'Synced · ' : 'Synced with OneDrive · ') + t);
 }
 
 /* ---------------- Gate ---------------- */
@@ -597,6 +604,27 @@ function hideGate(){ $('gate').classList.remove('open'); }
 /* ---------------- Auth (MSAL) ---------------- */
 function redirectUri(){ return location.origin + location.pathname.replace(/index\.html$/, ''); }
 
+/* MSAL sets an "interaction in progress" flag while signing in. If a sign-in is interrupted —
+   popup closed, page reloaded, tab switched away mid-flow — the flag is left behind and every
+   later attempt fails with interaction_in_progress, which looks like sign-in doing nothing at all.
+   Clearing stale flags on load and before each attempt is what fixed the Inventory Locator.
+   All these tools share one origin, so only this app's own flags (or un-scoped ones) are cleared. */
+function clearStuckInteraction(){
+  const GUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+  [window.sessionStorage, window.localStorage].forEach(store => {
+    try{
+      const drop = [];
+      for(let i = 0; i < store.length; i++){
+        const k = store.key(i);
+        if(!k || !/interaction\.status/i.test(k)) continue;
+        const otherApp = GUID.test(k) && k.indexOf(CONFIG.clientId) === -1;
+        if(!otherApp) drop.push(k);
+      }
+      drop.forEach(k => store.removeItem(k));
+    }catch(e){}
+  });
+}
+
 async function initAuth(){
   if(!window.msal) throw new Error('The Microsoft sign-in library did not load. Check your internet connection and reload.');
   msalApp = new msal.PublicClientApplication({
@@ -605,6 +633,7 @@ async function initAuth(){
       authority: 'https://login.microsoftonline.com/consumers',
       redirectUri: redirectUri(),
       postLogoutRedirectUri: redirectUri(),
+      navigateToLoginRequestUrl: false,
     },
     cache: { cacheLocation: 'localStorage' },
   });
@@ -616,6 +645,7 @@ async function initAuth(){
     console.warn('Redirect sign-in did not complete:', e && (e.errorCode || e.message));
     try{ sessionStorage.setItem('at_auto_tried', String(Date.now())); }catch(_){}
   }
+  clearStuckInteraction();   // a fresh page load can't be mid-sign-in
   if(resp && resp.account){
     msalApp.setActiveAccount(resp.account);
     lsSet(LS.noAuto, false);
@@ -637,8 +667,9 @@ const FRAMED = (window.self !== window.top);
 
 async function signIn(){
   lsSet(LS.noAuto, false);
+  clearStuckInteraction();
   const hint = rememberedUser();
-  const req = { scopes: SCOPES };
+  const req = { scopes: SCOPES, redirectUri: redirectUri() };
   if(hint) req.loginHint = hint; else req.prompt = 'select_account';
   if(!FRAMED){ msalApp.loginRedirect(req); return; }
   try{
@@ -648,6 +679,7 @@ async function signIn(){
       location.reload();
     }
   }catch(e){
+    clearStuckInteraction();   // so the next attempt isn't blocked by this failure
     const code = (e && e.errorCode) || '';
     if(code === 'user_cancelled') return;
     if(code === 'popup_window_error' || code === 'empty_window_error'){
@@ -668,6 +700,15 @@ function tryAutoSignIn(){
   try{ sessionStorage.setItem('at_auto_tried', String(Date.now())); }catch(_){}
   showGate('Action Tracker', 'Signing you in as ' + rememberedUser() + '…');
   signIn();
+  // If the browser never actually navigates (restored from the back button, redirect blocked),
+  // stop showing "signing you in" and offer the button instead.
+  setTimeout(() => {
+    if(!account){
+      clearStuckInteraction();
+      showGate('Action Tracker', 'Continue as ' + rememberedUser() + '.', 'Continue with Microsoft', signIn);
+      setStatus('', 'Signed out');
+    }
+  }, 15000);
   return true;
 }
 
@@ -687,11 +728,17 @@ async function getToken(){
     const code = (e && (e.errorCode || e.name)) || '';
     if(e instanceof msal.InteractionRequiredAuthError || /interaction_required|login_required|consent_required|no_tokens_found|monitor_window_timeout/.test(code)){
       setStatus('dirty', 'Session expired — signing in again…');
+      clearStuckInteraction();
       if(FRAMED){
-        const r = await msalApp.acquireTokenPopup({ scopes: SCOPES, account, loginHint: account.username });
-        return r.accessToken;
+        try{
+          const r = await msalApp.acquireTokenPopup({ scopes: SCOPES, account, loginHint: account.username, redirectUri: redirectUri() });
+          return r.accessToken;
+        }catch(e2){
+          clearStuckInteraction();
+          throw e2;
+        }
       }
-      await msalApp.acquireTokenRedirect({ scopes: SCOPES, account, loginHint: account.username });
+      await msalApp.acquireTokenRedirect({ scopes: SCOPES, account, loginHint: account.username, redirectUri: redirectUri() });
       return new Promise(() => {});   // page is navigating away
     }
     throw e;
@@ -1604,11 +1651,17 @@ let resizeTimer;
 window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(render, 150); });
 
 (async function init(){
+  // MSAL loads this same page inside hidden iframes (silent token renewal) and popup windows for its
+  // own bookkeeping. Those copies must bail out before any MSAL call, or they consume the sign-in
+  // result the real window is waiting for. Checked first, ahead of initAuth().
+  if((window.name && window.name.indexOf('msal.') === 0) || (FRAMED && /[#&?](code|error|state)=/.test(location.hash))) return;
+
   items = lsGet(LS.items, []);
   pendingOps = lsGet(LS.ops, []);
   dataFile = lsGet(LS.dataFile, null);
   attachFolder = lsGet(LS.attach, null);
   groupSubs = lsGet(LS.group, false) === true;
+  if(FRAMED) document.body.classList.add('framed');
   render();
 
   if(!CONFIG.clientId || CONFIG.clientId.startsWith('PASTE')){
@@ -1618,10 +1671,6 @@ window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer
   }
   try{ await initAuth(); }
   catch(e){ showGate('Sign-in problem', e.message, 'Reload', () => location.reload()); setStatus('error', 'Sign-in problem'); return; }
-
-  // The sign-in popup (and any hidden MSAL frame) loads this page just to hand the result back.
-  // initAuth() has done that; these copies must not run the app or start another sign-in.
-  if((window.name && window.name.indexOf('msal.') === 0) || (FRAMED && /[#&?](code|error|state)=/.test(location.hash))) return;
 
   if(FRAMED){
     ['openFullLink', 'gateFullLink'].forEach(id => {
