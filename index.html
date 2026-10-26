@@ -537,10 +537,10 @@ const CONFIG = {
 };
 /* ===================================================================== */
 
-const VERSION = '2026-10-17 · new app icon';
+const VERSION = '2026-10-26 · redirect sign-in with remembered account';
 const SCOPES = ['User.Read', 'Files.ReadWrite'];
 const GRAPH = 'https://graph.microsoft.com/v1.0';
-const LS = { items:'at_items_cache', ops:'at_pending_ops', dataFile:'at_data_file', attach:'at_attach_folder', group:'at_group_subs' };
+const LS = { items:'at_items_cache', ops:'at_pending_ops', dataFile:'at_data_file', attach:'at_attach_folder', group:'at_group_subs', lastUser:'at_last_user', noAuto:'at_no_auto_signin' };
 const SIMPLE_UPLOAD_MAX = 4 * 1024 * 1024;
 const CHUNK = 327680 * 10;
 const DATA_FILE_NAME = 'action-tracker-data.json';
@@ -607,17 +607,52 @@ async function initAuth(){
     cache: { cacheLocation: 'localStorage' },
   });
   await msalApp.initialize();
-  const resp = await msalApp.handleRedirectPromise();
-  if(resp && resp.account) msalApp.setActiveAccount(resp.account);
+  let resp = null;
+  try{ resp = await msalApp.handleRedirectPromise(); }
+  catch(e){
+    // A failed automatic bounce (e.g. Microsoft session gone) must not loop — fall back to the one-tap button.
+    console.warn('Redirect sign-in did not complete:', e && (e.errorCode || e.message));
+    try{ sessionStorage.setItem('at_auto_tried', String(Date.now())); }catch(_){}
+  }
+  if(resp && resp.account){
+    msalApp.setActiveAccount(resp.account);
+    lsSet(LS.noAuto, false);
+  }
   account = msalApp.getActiveAccount() || msalApp.getAllAccounts()[0] || null;
-  if(account) msalApp.setActiveAccount(account);
+  if(account){
+    msalApp.setActiveAccount(account);
+    if(account.username) lsSet(LS.lastUser, account.username);   // remember who you are
+  }
 }
 
-function signIn(){ msalApp.loginRedirect({ scopes: SCOPES, prompt: 'select_account' }); }
+function rememberedUser(){ return lsGet(LS.lastUser, '') || ''; }
+
+/* Redirect flow with a remembered account: with a login hint Microsoft skips the account
+   picker, and if your Microsoft session is alive you come straight back signed in. */
+function signIn(){
+  lsSet(LS.noAuto, false);
+  const hint = rememberedUser();
+  const req = { scopes: SCOPES };
+  if(hint) req.loginHint = hint; else req.prompt = 'select_account';
+  msalApp.loginRedirect(req);
+}
+
+/* Signed out but remembered (e.g. tokens expired): bounce to Microsoft automatically — at most
+   once per 5 minutes so a failed attempt can never loop. Skipped after an explicit Sign out. */
+function tryAutoSignIn(){
+  if(!rememberedUser() || lsGet(LS.noAuto, false)) return false;
+  let last = 0; try{ last = parseInt(sessionStorage.getItem('at_auto_tried') || '0', 10) || 0; }catch(_){}
+  if(Date.now() - last < 5 * 60 * 1000) return false;
+  try{ sessionStorage.setItem('at_auto_tried', String(Date.now())); }catch(_){}
+  showGate('Action Tracker', 'Signing you in as ' + rememberedUser() + '…');
+  signIn();
+  return true;
+}
 
 async function signOut(){
   if(pendingOps.length && !confirm('Some changes have not reached OneDrive yet. Sign out anyway? They will be lost.')) return;
   lsSet(LS.ops, []); lsSet(LS.items, []);
+  lsSet(LS.noAuto, true);   // explicit sign-out: don't bounce straight back in
   await msalApp.logoutRedirect({ account });
 }
 
@@ -630,7 +665,7 @@ async function getToken(){
     const code = (e && (e.errorCode || e.name)) || '';
     if(e instanceof msal.InteractionRequiredAuthError || /interaction_required|login_required|consent_required|no_tokens_found|monitor_window_timeout/.test(code)){
       setStatus('dirty', 'Session expired — signing in again…');
-      await msalApp.acquireTokenRedirect({ scopes: SCOPES, account });
+      await msalApp.acquireTokenRedirect({ scopes: SCOPES, account, loginHint: account.username });
       return new Promise(() => {});   // page is navigating away
     }
     throw e;
@@ -1559,7 +1594,9 @@ window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer
   catch(e){ showGate('Sign-in problem', e.message, 'Reload', () => location.reload()); setStatus('error', 'Sign-in problem'); return; }
 
   if(!account){
-    showGate('Action Tracker', 'Sign in with the Microsoft account that holds your OneDrive.', 'Sign in with Microsoft', signIn);
+    if(tryAutoSignIn()) return;
+    const who = rememberedUser();
+    showGate('Action Tracker', who ? 'Continue as ' + who + '.' : 'Sign in with the Microsoft account that holds your OneDrive.', who ? 'Continue with Microsoft' : 'Sign in with Microsoft', signIn);
     setStatus('', 'Signed out');
     return;
   }
